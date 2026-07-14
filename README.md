@@ -52,8 +52,8 @@ Chose Groq over OpenAI mostly to save cost on the project. The speed is actually
 ## Why LangGraph over LangChain
 
 LangChain chains are stateless — each call is independent with no memory of previous steps. LangGraph introduces a proper state machine with built-in checkpointing, which is what makes multi-step human-in-the-loop workflows possible.
-
 Without checkpointing, the entire pipeline would need to re-execute from the start each time a user responds. With `MemorySaver`, the graph persists state at every node and resumes from the exact point it was interrupted — making 4-step HITL flows practical without re-running expensive LLM calls.
+
 ---
 
 ## Project structure
