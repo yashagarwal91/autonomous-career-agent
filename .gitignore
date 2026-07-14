@@ -1,0 +1,6 @@
+career-agent-env/
+.env
+__pycache__/
+*.pyc
+*.db
+.DS_Store
