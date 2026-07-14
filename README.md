@@ -1,56 +1,59 @@
 # Autonomous Career Intelligence Agent
 
-I built this after getting tired of manually checking job postings, comparing them to my resume, and then not knowing what to actually learn next. Wanted something that does that whole loop automatically but still asks me before making decisions.
-
-It's a LangGraph agent with 5 tools — web search, local job DB, gap analyzer, resource finder, and market trends. You upload your resume, it figures out where you stand against current job market demand, and generates a learning plan. At 4 points in the flow it stops and asks you to confirm before continuing.
-
-Not trying to make this production-ready. Just wanted to get hands-on with stateful agents and HITL after spending most of my time at work on RAG pipelines.
+A multi-tool LangGraph agent that analyzes your resume against the current job market, identifies skill gaps, and generates a personalized learning plan — with human-in-the-loop validation at every major decision point.
 
 ---
 
-## Screenshots
+## Demo
 
-| Upload Resume | Skill Confirmation | Target Role | Learning Plan |
-|---|---|---|
-| ![upload](screenshots/upload.png) | ![skills](screenshots/skills.png) | ![target](screenshots/target.png) | ![plan](screenshots/plan.png) |
+### Upload Resume
+![upload](screenshots/upload.png)
+
+### Skill Confirmation
+![skills](screenshots/skills.png)
+
+### Target Role
+![target](screenshots/target.png)
+
+### Learning Plan
+![plan](screenshots/plan.png)
 
 ---
 
 ## What I Learned / What Didn't Work
 
-**HITL is trickier than it looks.** The concept is simple — pause, wait, resume. But getting `interrupt()` and `Command(resume=...)` working correctly with FastAPI took longer than expected. The graph state needs to be serializable at every interrupt point, which broke a few times when I was passing raw PDF bytes through state instead of converting them earlier.
+**HITL requires careful state design.** The concept is straightforward — pause, wait, resume. In practice, LangGraph's `interrupt()` and `Command(resume=...)` require every value in state to be serializable at each checkpoint. Passing raw PDF bytes through the graph state caused silent failures until I moved the conversion earlier in the pipeline.
 
-**LLaMA 3.3 70B isn't GPT-4 reliable on structured output.** When asking it to return JSON inside a ReAct loop with active tool calls, it occasionally wrapped the output in markdown fences or added extra text before the JSON. Added `.replace("```json", "")` cleanup and fallback defaults in two nodes. Not a dealbreaker but worth knowing upfront.
+**LLaMA 3.3 70B needs output guardrails for structured responses.** Inside a ReAct loop with active tool calls, the model occasionally wraps JSON in markdown fences or prepends commentary. Added cleanup and fallback defaults in the two nodes that depend on JSON output — `search_jobs_node` and `generate_plan_node`.
 
-**Tool docstrings matter more than I expected.** The LLM picks which tool to call entirely based on the docstring. Early version of `analyze_skill_gaps` had a vague description and the agent kept calling `search_job_postings` instead. Rewrote the docstring to be more specific and it fixed immediately — didn't touch any other code.
+**Tool docstrings directly influence routing decisions.** The LLM selects tools entirely based on their description. A vague docstring on `analyze_skill_gaps` caused the agent to route to `search_job_postings` instead. Rewriting the description to be more specific resolved the routing without any logic changes.
 
-**MemorySaver loses everything on restart.** Restarting the API mid-session wipes all state. Kept it anyway since this is single-user and restarting mid-flow is rare in practice. `SqliteSaver` is the fix if this needs persistence.
+**`MemorySaver` doesn't survive process restarts.** Sessions are lost when the API restarts. Acceptable for single-user local use, but `SqliteSaver` would be the right choice if persistence across restarts is needed.
 
 ---
 
-## Stack
+## Tech Stack
 
-| | Choice | Why |
-|---|---|---|
-| Agent | LangGraph | Needed real state management, not just chains |
-| LLM | Groq / LLaMA 3.3 70B | Free, fast, supports tool calling |
-| Search | Tavily | Cleaner than scraping, built for this use case |
-| DB | SQLite + SQLAlchemy | Didn't need anything heavier |
-| PDF | PyMuPDF | Just works, handles multi-page fine |
-| API | FastAPI | Standard, auto docs |
-| UI | Streamlit | Didn't want to build a full frontend for this |
-| Tracing | LangSmith | Two env vars and you get full trace visibility |
+| Layer | Technology |
+|---|---|
+| LLM | Groq / LLaMA 3.3 70B |
+| Agent Framework | LangGraph |
+| Web Search | Tavily |
+| Database | SQLite + SQLAlchemy |
+| PDF Parsing | PyMuPDF |
+| Backend | FastAPI + Uvicorn |
+| Frontend | Streamlit |
+| Tracing | LangSmith |
 
 Chose Groq over OpenAI mostly to save cost on the project. The speed is actually better too.
 
 ---
 
-## Why LangGraph and not just LangChain
+## Why LangGraph over LangChain
 
-At work I've mostly used LangChain chains which are stateless — each call is independent. LangGraph gives you a proper state machine where the graph can pause mid-execution, save its state, and resume later. That's the only way human-in-the-loop actually works across multiple steps.
+LangChain chains are stateless — each call is independent with no memory of previous steps. LangGraph introduces a proper state machine with built-in checkpointing, which is what makes multi-step human-in-the-loop workflows possible.
 
-Without checkpointing, you'd have to re-run the entire pipeline from scratch each time the user responds. With it, the graph just picks up from the exact node where it paused.
-
+Without checkpointing, the entire pipeline would need to re-execute from the start each time a user responds. With `MemorySaver`, the graph persists state at every node and resumes from the exact point it was interrupted — making 4-step HITL flows practical without re-running expensive LLM calls.
 ---
 
 ## Project structure
@@ -117,4 +120,4 @@ streamlit run ui/app.py
 
 ## Author
 **Yash** — GenAI / LLM Engineer  
-Built this to get hands-on with stateful agents and HITL after spending most of my work on RAG pipelines.
+Exploring agentic AI patterns beyond RAG — stateful orchestration, tool calling, and human-in-the-loop workflows.
